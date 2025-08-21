@@ -5,21 +5,17 @@ const { asyncWrapper } = require('../middlewares/wrapper');
 const { supabase } = require('../config/database');
 const hash = require('password-hash');
 const auth_router = express.Router();
-const jwt = require('jsonwebtoken')
 const {onWriteToken, onReadToken} = require('../functions/token')
-const {checkoutUserEmail} = require('../functions/codeConfirm')
+const {checkoutUserEmail} = require('../functions/codeConfirm');
+const { onInvalidData } = require('../functions/invalidData');
 
 auth_router.post("/auth/login",upload.none(),asyncWrapper(async (req,res)=>{
 
     const {email,password} = req.body;
 
-    if(!email){
-        throw new Error("Campo email inválido");
-    }
+        onInvalidData(email,"Campo email inválido",true)        
 
-    if(!password){
-        throw new Error("Campo senha inválido");
-    }
+        onInvalidData(password,"Campo senha inválido",true)        
 
     const email_check = await supabase
     .from("tb_user")
@@ -50,17 +46,11 @@ auth_router.post("/auth/register",upload.none(),asyncWrapper(async (req,res)=>{
 
     const {email,username,password} = req.body
 
-    if(!username){
-        throw new Error("Campo username inválido")
-    }
+        onInvalidData(username,"Campo username inválido",true)
 
-    if(!email){
-        throw new Error("Campo email inválido")
-    }
+        onInvalidData(email,"Campo email inválido",true)
 
-    if(!password){
-        throw new Error("Campo senha inválido")
-    }
+        onInvalidData(password,"Campo senha inválido",true)
     
     const database_users = await supabase
     .from("tb_user")
@@ -81,9 +71,7 @@ auth_router.post("/auth/register",upload.none(),asyncWrapper(async (req,res)=>{
     })
     .select("id")
 
-    if(user_insert.error){
-        throw new Error("Falha no cadastro de usuário. Tente novamente.")
-    }
+        onInvalidData(!(user_insert.error),"Falha no cadastro de usuário. Tente novamente.",true)
 
     const auth_token = onWriteToken(user_insert.data[0].id) 
 
@@ -100,9 +88,7 @@ auth_router.get("/auth/email-cooldown",upload.none(),asyncWrapper(async (req,res
 
     const {token} = req.query
 
-    if(!token){
-        throw new Error("Token inválido")
-    }   
+        onInvalidData(token,"Token inválido",true)
 
     const user_auth = onReadToken({
         token:token
@@ -131,9 +117,7 @@ auth_router.get("/auth/checkout",upload.none(),asyncWrapper(async (req,res)=>{
 
     const {token,sendEmail} = req.query
 
-    if(!token){
-        throw new Error("Token inválido")
-    }
+        onInvalidData(token,"Token inválido",true)
     
     const user_auth = onReadToken({
         token:token
@@ -174,9 +158,7 @@ auth_router.post("/auth/checkout",upload.none(),asyncWrapper(async(req,res)=>{
     
     const {code} = req.body
 
-    if(!token){
-        throw new Error("Token inválido")
-    }
+        onInvalidData(token,"Token inválido",true)
 
     const user_auth = onReadToken({
         token:token
@@ -186,9 +168,7 @@ auth_router.post("/auth/checkout",upload.none(),asyncWrapper(async(req,res)=>{
         return res.status(401).send({message:"Usuário não autenticado",status:401})
     } 
 
-    if(!code){
-        throw new Error("Código inválido")
-    }
+        onInvalidData(code,"Código inválido",true)
         const current_user_code = await supabase.from("vw_table_user_code")
         .select("code_id")
         .eq("user_id",user_auth.id)

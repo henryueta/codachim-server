@@ -1,15 +1,6 @@
-const { sendUserEmail } = require("./api/functions/email");
+const { onInvalidData } = require("./api/functions/invalidData");
 
-sendUserEmail(
-    "E-mail teste",
-    "henrykenjiueta@gmail.com",
-    "E-mail teste para projeto",
-    `<p>Conteúdo do e-mail</p>`,
-    {
-    onThen(){
-    },
-    onCatch(error){
-        console.log("error",error)
-    }
-    }
-)
+let num = 1;
+
+
+
