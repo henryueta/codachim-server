@@ -1,5 +1,5 @@
 const { supabase } = require("../../api/config/database");
-const { sendUserEmail } = require("./emailSender");
+const { sendUserEmail } = require("../functions/email");
 
 const createCheckoutCode = ()=>{
 

@@ -7,6 +7,7 @@ const hash = require('password-hash');
 const auth_router = express.Router();
 const jwt = require('jsonwebtoken')
 const {onWriteToken, onReadToken} = require('../functions/token')
+const {checkoutUserEmail} = require('../functions/codeConfirm')
 
 auth_router.post("/auth/login",upload.none(),asyncWrapper(async (req,res)=>{
 
@@ -92,25 +93,65 @@ auth_router.post("/auth/register",upload.none(),asyncWrapper(async (req,res)=>{
 
 }))
 
-auth_router.get("/auth/checkout",upload.none(),asyncWrapper(async (req,res)=>{
+const tokenCoolDowns = new Map();
+const cooldownTime = 60 * 1000
+
+auth_router.get("/auth/email-cooldown",upload.none(),asyncWrapper(async (req,res)=>{
 
     const {token} = req.query
 
     if(!token){
         throw new Error("Token inválido")
+    }   
+
+    const user_auth = onReadToken({
+        token:token
+    })
+
+    if(!user_auth.validated){
+            return res.status(401).send({message:"Usuário não autenticado",status:401})
+    }
+
+    const last_send = tokenCoolDowns.get(user_auth.id)
+
+    if(last_send && Date.now() - last_send < cooldownTime){
+
+        const secondsLeft = Math.ceil((cooldownTime - (Date.now() - last_send)) / 1000);
+        return res.status(429).send({ message: `Aguarde ${secondsLeft}s para reenviar o código.`,data:{
+            secondsLeft:secondsLeft
+        }});
+
+    }
+
+    return res.status(200).send({message:"Código pronto para envio",data:{secondsLeft:59}})
+
+}))
+
+auth_router.get("/auth/checkout",upload.none(),asyncWrapper(async (req,res)=>{
+
+    const {token,sendEmail} = req.query
+
+    if(!token){
+        throw new Error("Token inválido")
     }
     
-    const user_auth = onReadToken(token)
+    const user_auth = onReadToken({
+        token:token
+    })
 
         if(!user_auth.validated){
             return res.status(401).send({message:"Usuário não autenticado",status:401})
         } 
 
-        const {sendEmail} = req.query
             
         const userCheckout = await checkoutUserEmail(user_auth.id,!!(sendEmail.toLowerCase() === "true"))
 
         console.log(userCheckout.message)
+
+        if(userCheckout.data.email && sendEmail.toLowerCase() === "true"){
+            tokenCoolDowns.set(user_auth.id,Date.now())
+
+        }
 
         res.status(userCheckout.status).send(
             {
@@ -126,6 +167,74 @@ auth_router.get("/auth/checkout",upload.none(),asyncWrapper(async (req,res)=>{
     )
 
 }))
+
+auth_router.post("/auth/checkout",upload.none(),asyncWrapper(async(req,res)=>{
+    
+    const {token} = req.query
+    
+    const {code} = req.body
+
+    if(!token){
+        throw new Error("Token inválido")
+    }
+
+    const user_auth = onReadToken({
+        token:token
+    })
+
+    if(!user_auth){
+        return res.status(401).send({message:"Usuário não autenticado",status:401})
+    } 
+
+    if(!code){
+        throw new Error("Código inválido")
+    }
+        const current_user_code = await supabase.from("vw_table_user_code")
+        .select("code_id")
+        .eq("user_id",user_auth.id)
+        .eq("code_value",code)
+        .eq('is_valid',true)
+        .eq("code_is_used",false)
+
+
+        if(current_user_code.data.length){
+            
+            await supabase.from("tb_user_code")
+            .update({
+                is_used:true
+            })
+            .eq("id",current_user_code.data[0].code_id)
+
+
+            await supabase.from("tb_user")
+            .update({
+                is_checked:true,
+            })
+            .eq("id",user_auth.id)
+            
+            return res.status(201).send({message:"Usuário verificado com sucesso",status:201,
+                data:{
+                    is_checked:true
+                }
+            })
+        }
+
+        if(!(current_user_code.data.length)){
+
+            return res.status(401).send({message:"Código de confirmação inválido",status:401,
+                data:{
+                    is_checked:false
+                }
+            })
+        }
+
+        if(current_user_code.error){
+            return res.status(500).send({message:current_user_code.error,status:500})
+        }
+
+    
+}))
+
 
 module.exports = {
     auth_router
